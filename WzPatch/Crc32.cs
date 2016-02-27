@@ -7,32 +7,38 @@ using System.IO;
 
 namespace WzPatch
 {
-    class Crc32
+    public class Crc32
     {
         private const UInt32 Polynomial = 0x04C11DB7;
         private UInt32[] table;
         private UInt32 crc;
 
-        public Crc32()
+        public Crc32(UInt32 initialValue = 0)
         {
-            this.CreateTable();
-        }
-        /*
-        public static bool operator ==(Crc32 x, UInt32 y)
-        {
-            return x.crc == y;
+            crc = initialValue;
+            CreateTable();
         }
 
-        public static bool operator == (Crc32 x, Crc32 y)
+        public override bool Equals(object obj)
+        {
+            return base.Equals(obj);
+        }
+
+        public static bool operator ==(Crc32 x, Crc32 y)
         {
             return x.crc == y.crc;
         }
 
-        public static bool operator == (UInt32 x, Crc32 y)
+        public static bool operator !=(Crc32 x, Crc32 y)
         {
-            return x == y.crc;
+            return x.crc != y.crc;
         }
-        */
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
         protected void CreateTable()
         {
             table = new UInt32[256];
@@ -67,9 +73,14 @@ namespace WzPatch
 
             for (blockPos = 0; blockPos < length; blockPos++)
             {
-                indexLookup = (byte)((this.crc >> 0x18) ^ buf[blockPos]);
-                this.crc = (this.crc << 0x08) ^ this.table[indexLookup];
+                indexLookup = (byte)((crc >> 0x18) ^ buf[blockPos]);
+                crc = (crc << 0x08) ^ table[indexLookup];
             }
+        }
+
+        public override string ToString()
+        {
+            return crc.ToString();
         }
 
         public void Update(BinaryReader buf)
@@ -79,13 +90,8 @@ namespace WzPatch
             do
             {
                 readLength = buf.Read(b, 0, b.Length);
-                this.Update(b, readLength);
+                Update(b, readLength);
             } while (readLength > 0);
-        }
-
-        public UInt32 GetCRC()
-        {
-            return this.crc;
         }
     }
 }

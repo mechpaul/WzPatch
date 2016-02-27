@@ -30,9 +30,14 @@ namespace WzPatch
 	    public string filePath;
         public UInt32 length;
         public EFileBlockMode fileBlockMode;
-        public UInt32 crc;
-        public UInt32 crcOld;
+        public Crc32 crc;
+        public Crc32 crcOld;
         public byte[] dumpFile;
+
+        public static implicit operator DumpBlock(string s)
+        {
+            return new DumpBlock { crc = new Crc32(), crcOld = new Crc32()};
+        }
     }
 
     public struct RebuildBlock

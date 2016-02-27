@@ -8,93 +8,123 @@ using System.IO.Compression;
 
 namespace WzPatch
 {
-    public class PatchAccessor
+    public class PatchBinaryReader : BinaryReader
     {
-        protected BinaryReader patch;
-        protected string path;
+        protected int MagicBytesOffset = 0;
+        protected string MagicBytesContents = "WzPatch\x1A";
 
-        protected const int MagicBytesOffset = 0;
-        protected const string MagicBytesContents = "WzPatch\x1A";
+        protected int VersionOffset = 8;
+        protected int VersionContents = 2;
 
-        protected const int VersionOffset = 8;
-        protected const int VersionContents = 2;
+        protected int CRCOffset = 12;
 
-        protected const int CRCOffset = 12;
+        protected int ZlibOffset = 16;
+        protected int DeflateOffset = 18;
 
-        protected const int ZlibOffset = 16;
-        protected const int DeflateOffset = 18;
-
-        public PatchAccessor(string filePath)
-        {
-            this.path = filePath;
-            this.patch = new BinaryReader(File.Open(this.GetPath(), FileMode.Open));
-        }
+        public PatchBinaryReader(Stream baseStream) : base(baseStream) { }
 
         public string GetMagicBytes()
         {
-            var s = new byte[PatchAccessor.MagicBytesContents.Length];
-            this.patch.BaseStream.Position = PatchAccessor.MagicBytesOffset;
-            this.patch.Read(s, 0, s.Length);
+            var s = new byte[MagicBytesContents.Length];
+            BaseStream.Position = MagicBytesOffset;
+            Read(s, 0, s.Length);
             string magicBytes = Encoding.UTF8.GetString(s);
             return magicBytes;
         }
 
         public bool ValidateMagicBytes()
         {
-            return this.GetMagicBytes() == PatchAccessor.MagicBytesContents;
+            return GetMagicBytes() == MagicBytesContents;
         }
 
         public UInt32 GetCRC()
         {
-            this.patch.BaseStream.Position = PatchAccessor.CRCOffset;
-            return this.patch.ReadUInt32();
+            BaseStream.Position = CRCOffset;
+            return ReadUInt32();
+        }
+
+        public Crc32 CalculateCRC()
+        {
+            var crc = new Crc32();
+            BaseStream.Position = ZlibOffset;
+            crc.Update(this);
+            return crc;
         }
 
         public bool ValidateCRC()
         {
-            var crc = new Crc32();
-            this.patch.BaseStream.Position = PatchAccessor.ZlibOffset;
-            crc.Update(this.patch);
-            UInt32 calculatedcrc, patchcrc;
-            calculatedcrc = crc.GetCRC();
-            patchcrc = this.GetCRC();
-            return calculatedcrc == patchcrc;
+            var patchBinCRC = new Crc32(GetCRC());
+            return CalculateCRC() == patchBinCRC;
         }
 
         public UInt32 GetVersion()
         {
-            this.patch.BaseStream.Position = PatchAccessor.VersionOffset;
-            return this.patch.ReadUInt32();
+            BaseStream.Position = VersionOffset;
+            return ReadUInt32();
         }
 
         public bool ValidateVersion()
         {
-            return this.GetVersion() == PatchAccessor.VersionContents;
+            return GetVersion() == VersionContents;
         }
 
         public DeflateStream GetDeflateStream()
         {
-            this.patch.BaseStream.Position = PatchAccessor.DeflateOffset;
-            return new DeflateStream(this.patch.BaseStream, CompressionMode.Decompress);
+            BaseStream.Position = DeflateOffset;
+            return new DeflateStream(BaseStream, CompressionMode.Decompress);
+        }
+
+    }
+
+    public class PatchAccessor
+    {
+        protected PatchBinaryReader patch;
+        protected string path;
+        protected Stream pbrstream;
+
+        public PatchAccessor(string filePath)
+        {
+            path = filePath;
+            pbrstream = File.Open(GetPath(), FileMode.Open);
+            patch = new PatchBinaryReader(pbrstream);
+        }
+
+        public PatchAccessor(Stream s)
+        {
+            path = "";
+            pbrstream = s;
+            patch = new PatchBinaryReader(pbrstream);
+
+        }
+
+        public Stream GetStream()
+        {
+            return pbrstream;
+        }
+
+        public bool ValidatePatch()
+        {
+            return patch.ValidateMagicBytes() && patch.ValidateCRC() && patch.ValidateVersion();
         }
 
         public string GetDeflatePath()
         {
-            return Path.ChangeExtension(this.GetPath(), "patch.dump");
+            return Path.ChangeExtension(GetPath(), "patch.dump");
         }
 
-        public void DumpDeflateStream(string filePath = "")
+        public string DumpDeflateStream(string filePath = "")
         {
-            filePath = filePath.Length > 0 ? filePath : this.GetDeflatePath();
+            filePath = filePath.Length > 0 ? filePath : GetDeflatePath();
             var f = new FileStream(filePath, FileMode.Create);
-            var d = this.GetDeflateStream();
+            var d = patch.GetDeflateStream();
             d.CopyTo(f);
             f.Close();
+            return filePath;
         }
 
         public string GetPath()
         {
-            return this.path;
+            return path;
         }
 
 

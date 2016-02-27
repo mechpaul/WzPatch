@@ -16,25 +16,25 @@ namespace WzPatch
 
         public DumpPatchApplier(string dumpedPatchFilePath, string applyDirectory, string outputDirectory)
         {
-            this.dumpedPatchFile = dumpedPatchFilePath;
-            this.dirApply = applyDirectory;
-            this.dirOut = outputDirectory;
-            if(!Directory.Exists(this.dirApply))
+            dumpedPatchFile = dumpedPatchFilePath;
+            dirApply = applyDirectory;
+            dirOut = outputDirectory;
+            if(!Directory.Exists(dirApply))
             {
                 throw new System.InvalidProgramException("DumpPatchApplier - Cannot set the directory to apply the patch file when that directory does not exist!");
             }
-            Directory.CreateDirectory(this.dirOut);
+            Directory.CreateDirectory(dirOut);
         }
 
         public void ApplyPatch()
         {
-            this.dpe = new DumpPatchEmitter(this.dumpedPatchFile);
+            dpe = new DumpPatchEmitter(dumpedPatchFile);
             string path = "";
             Stream fs;
             bool end = false;
             while(true)
             {
-                var dumpblock = this.dpe.ReadBlockString();
+                var dumpblock = dpe.ReadBlockString();
                 switch(dumpblock.fileBlockMode)
                 {
                     case EFileBlockMode.CreateDirectory:
@@ -43,27 +43,29 @@ namespace WzPatch
                     case EFileBlockMode.CreateFile:
                         var crc = new Crc32();
                         crc.Update(dumpblock.dumpFile, dumpblock.dumpFile.Length);
-                        if(crc.GetCRC() == dumpblock.crc)
+                        if(crc == dumpblock.crc)
                         {
-                            path = Path.Combine(this.dirOut, dumpblock.filePath);
+                            path = Path.Combine(dirOut, dumpblock.filePath);
                             Directory.CreateDirectory(Path.GetDirectoryName(path));
                             fs = File.Create(path);
+                            
                             fs.Write(dumpblock.dumpFile, 0, dumpblock.dumpFile.Length);
                             fs.Close();
                         }
                         else
                         {
-                            throw new System.InvalidProgramException(String.Format("DumpPatchApplier: CRC failed for created file {1}. This means the patch file is corrupted. Please redownload the patch", dumpblock.filePath));
+                            throw new System.InvalidProgramException(String.Format(strings.DumpPatchApplierCRCFail, dumpblock.filePath));
+                            //throw new System.InvalidProgramException(String.Format("DumpPatchApplier: CRC failed for created file {1}. This means the patch file is corrupted. Please redownload the patch", dumpblock.filePath));
                         }
                         break;
                     case EFileBlockMode.DeleteDirectory:
-                        path = Path.Combine(this.dirOut, "deletedfiles.txt");
-                        StreamWriter sw = File.AppendText(path);
+                        path = Path.Combine(dirOut, "deletedfiles.txt");
+                        var sw = File.AppendText(path);
                         sw.WriteLine(dumpblock.filePath);
                         sw.Close();
                         break;
                     case EFileBlockMode.Rebuild:
-                        this.RebuildFile(dumpblock);
+                        RebuildFile(dumpblock);
                         break;
                     case EFileBlockMode.End:
                         end = true;
@@ -80,8 +82,8 @@ namespace WzPatch
 
         public void RebuildFile(DumpBlock dumpblock)
         {
-            var pathOut = Path.Combine(this.dirOut, dumpblock.filePath);
-            var pathIn = Path.Combine(this.dirApply, dumpblock.filePath);
+            var pathOut = Path.Combine(dirOut, dumpblock.filePath);
+            var pathIn = Path.Combine(dirApply, dumpblock.filePath);
             var crc = new Crc32();
             var crcOld = new Crc32();
             byte[] buf;
@@ -94,11 +96,11 @@ namespace WzPatch
 
             crcOld.Update(oldfs);
 
-            if(crcOld.GetCRC() == dumpblock.crcOld)
+            if(crcOld == dumpblock.crcOld)
             {
                 while(true)
                 {
-                    var rb = this.dpe.ReadRebuildBlock();
+                    var rb = dpe.ReadRebuildBlock();
                     switch(rb.fileBlockRebuild)
                     {
                         case EFileBlockRebuild.Copy:
@@ -126,14 +128,14 @@ namespace WzPatch
                     }
                 }
 
-                if(crc.GetCRC() != dumpblock.crc)
+                if(crc != dumpblock.crc)
                 {
                     throw new System.InvalidProgramException(String.Format("DumpPatchApplier: The calculated CRC for the newly created file is wrong. Please contact Fiel to fix this as there's a problem with the algorithm"));
                 }
             }
             else
             {
-                throw new System.InvalidProgramException(String.Format("DumpPatchApplier: The calculated CRC for the old file {0} is wrong. Expected: {1}, Calculated: {2}", pathIn, dumpblock.crcOld, crcOld.GetCRC()));
+                throw new System.InvalidProgramException(String.Format("DumpPatchApplier: The calculated CRC for the old file {0} is wrong. Expected: {1}, Calculated: {2}", pathIn, dumpblock.crcOld.ToString(), crcOld.ToString()));
             }
         }
     }

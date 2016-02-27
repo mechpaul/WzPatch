@@ -17,81 +17,81 @@ namespace WzPatch
 
         public DumpPatchEmitter(string filePath)
         {
-            this.path = filePath;
-            this.br = new BinaryReader(File.Open(this.GetPath(), FileMode.Open));
+            path = filePath;
+            br = new BinaryReader(File.Open(GetPath(), FileMode.Open));
         }
 
         ~DumpPatchEmitter()
         {
-            this.br.Close();
+            br.Close();
         }
 
         public string GetPath()
         {
-            return this.path;
+            return path;
         }
 
         public DumpBlock ReadBlockString()
         {
             if(currentRebuildBlock == true)
             {
-                this.SkipRebuildBlocks();
+                SkipRebuildBlocks();
             }
             currentRebuildBlock = false;
 
-            this.dumpB = new DumpBlock();
+            dumpB = new DumpBlock();
             char readCh;
             string blockString = "";
             string lastChar = "";
 
-            if(this.br.BaseStream.Position == this.br.BaseStream.Length)
+            if(br.BaseStream.Position == br.BaseStream.Length)
             {
-                this.dumpB.fileBlockMode = EFileBlockMode.End;
-                return this.dumpB;
+                dumpB.fileBlockMode = EFileBlockMode.End;
+                return dumpB;
             }
 
             while(true)
             {
-                readCh = this.br.ReadChar();
+                readCh = br.ReadChar();
                 switch((int)readCh)
                 {
                     case 0:
                         lastChar = blockString.Substring(blockString.Length - 1);
                         if(lastChar == "\\" || lastChar == "/")
                         {
-                            this.dumpB.fileBlockMode = EFileBlockMode.CreateDirectory;
-                            this.dumpB.filePath = blockString;
+                            dumpB.fileBlockMode = EFileBlockMode.CreateDirectory;
+                            dumpB.filePath = blockString;
                         }
                         else
                         {
-                            this.dumpB.fileBlockMode = EFileBlockMode.CreateFile;
-                            this.dumpB.filePath = blockString;
-                            this.dumpB.length = this.br.ReadUInt32();
-                            this.dumpB.crc = this.br.ReadUInt32();
-                            this.dumpB.dumpFile = new byte[this.dumpB.length];
-                            this.br.BaseStream.Read(this.dumpB.dumpFile, 0, this.dumpB.dumpFile.Length);
+                            dumpB.fileBlockMode = EFileBlockMode.CreateFile;
+                            dumpB.filePath = blockString;
+                            dumpB.length = br.ReadUInt32();
+                            dumpB.crc = new Crc32(br.ReadUInt32());
+                            dumpB.dumpFile = new byte[dumpB.length];
+                            br.BaseStream.Read(dumpB.dumpFile, 0, dumpB.dumpFile.Length);
                         }
-                        return this.dumpB;
+                        return dumpB;
                     case 1:
-                        this.dumpB.fileBlockMode = EFileBlockMode.Rebuild;
-                        this.dumpB.filePath = blockString;
-                        this.dumpB.crcOld = this.br.ReadUInt32();
-                        this.dumpB.crc = this.br.ReadUInt32();
-                        this.currentRebuildBlock = true;
-                        return this.dumpB;
+                        dumpB.fileBlockMode = EFileBlockMode.Rebuild;
+                        dumpB.filePath = blockString;
+                        dumpB.crcOld = new Crc32(br.ReadUInt32());
+                        dumpB.crc = new Crc32(br.ReadUInt32());
+                        currentRebuildBlock = true;
+                        return dumpB;
                     case 2:
                         lastChar = blockString.Substring(blockString.Length - 1);
                         if(lastChar == "\\" || lastChar == "/")
                         {
-                            this.dumpB.fileBlockMode = EFileBlockMode.DeleteDirectory;
-                            this.dumpB.filePath = blockString;
+                            dumpB.fileBlockMode = EFileBlockMode.DeleteDirectory;
+                            dumpB.filePath = blockString;
                         }
                         else
                         {
-                            this.dumpB.fileBlockMode = EFileBlockMode.DeleteFile;
-                            this.dumpB.filePath = blockString;
+                            dumpB.fileBlockMode = EFileBlockMode.DeleteFile;
+                            dumpB.filePath = blockString;
                         }
-                        return this.dumpB;
+                        return dumpB;
                     default:
                         blockString += readCh;
                         break;
@@ -102,52 +102,50 @@ namespace WzPatch
 
         public RebuildBlock ReadRebuildBlock()
         {
-            this.rebuildB = new RebuildBlock();
-            UInt32 command;
+            rebuildB = new RebuildBlock();
+            var command = br.ReadUInt32();
 
-            command = this.br.ReadUInt32();
-
-            if((command == 0))
+            if(command == 0)
             {
-                this.rebuildB.fileBlockRebuild = EFileBlockRebuild.End;
-                this.currentRebuildBlock = false;
+                rebuildB.fileBlockRebuild = EFileBlockRebuild.End;
+                currentRebuildBlock = false;
             }
             else if((command & 0xC0000000) == 0xC0000000)
             {
-                this.rebuildB.fileBlockRebuild = EFileBlockRebuild.Repeat;
-                this.rebuildB.repeatedByte = (byte)(command & 0xFF);
-                this.rebuildB.length = (command & 0x3FFFF00) >> 8;
-                this.rebuildB.raw = new byte[this.rebuildB.length];
-                for(int i = 0; i < this.rebuildB.raw.Length; i++)
+                rebuildB.fileBlockRebuild = EFileBlockRebuild.Repeat;
+                rebuildB.repeatedByte = (byte)(command & 0xFF);
+                rebuildB.length = (command & 0x3FFFF00) >> 8;
+                rebuildB.raw = new byte[rebuildB.length];
+                for(int i = 0; i < rebuildB.raw.Length; i++)
                 {
-                    this.rebuildB.raw[i] = this.rebuildB.repeatedByte;
+                    rebuildB.raw[i] = rebuildB.repeatedByte;
                 }
             }
             else if((command & 0x80000000) == 0x80000000)
             {
-                this.rebuildB.fileBlockRebuild = EFileBlockRebuild.Write;
-                this.rebuildB.length = command & 0x7FFFFFFF;
-                this.rebuildB.raw = new byte[this.rebuildB.length];
-                this.br.Read(this.rebuildB.raw, 0, this.rebuildB.raw.Length);
+                rebuildB.fileBlockRebuild = EFileBlockRebuild.Write;
+                rebuildB.length = command & 0x7FFFFFFF;
+                rebuildB.raw = new byte[rebuildB.length];
+                br.Read(rebuildB.raw, 0, rebuildB.raw.Length);
             }
             else
             {
-                this.rebuildB.fileBlockRebuild = EFileBlockRebuild.Copy;
-                this.rebuildB.length = command;
-                this.rebuildB.oldFileOffset = this.br.ReadUInt32();
+                rebuildB.fileBlockRebuild = EFileBlockRebuild.Copy;
+                rebuildB.length = command;
+                rebuildB.oldFileOffset = br.ReadUInt32();
             }
 
 
-            return this.rebuildB;
+            return rebuildB;
         }
 
         public void SkipRebuildBlocks()
         {
-            if (this.currentRebuildBlock == true)
+            if (currentRebuildBlock == true)
             {
                 while (true)
                 {
-                    var rBlock = this.ReadRebuildBlock();
+                    var rBlock = ReadRebuildBlock();
                     if (rBlock.fileBlockRebuild == EFileBlockRebuild.End)
                     {
                         break;
